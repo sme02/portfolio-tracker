@@ -1,1 +1,943 @@
-hello
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Portfolio Tracker</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1a1a1a;
+    background: transparent;
+    font-size: 14px;
+  }
+  .wrap { padding: 4px 2px 24px; }
+  h1 { font-size: 18px; margin: 4px 0 12px; font-weight: 600; }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #e5e5e0;
+  }
+  .tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 14px;
+    font: inherit;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    border-radius: 0;
+    margin-bottom: -1px;
+  }
+  .tab:hover { color: #1a1a1a; background: transparent; }
+  .tab.active {
+    color: #1a1a1a;
+    border-bottom-color: #1a1a1a;
+    font-weight: 600;
+  }
+  .tab-count {
+    display: inline-block;
+    background: #e5e5e0;
+    color: #555;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 4px;
+    vertical-align: 1px;
+  }
+  .tab.active .tab-count { background: #1a1a1a; color: #fff; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .card {
+    background: #f7f7f5;
+    border: 1px solid #e5e5e0;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .card .label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card .value { font-size: 18px; font-weight: 600; margin-top: 4px; }
+  .pos { color: #058355; }
+  .neg { color: #c0392b; }
+  .neutral { color: #555; }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  button {
+    font: inherit;
+    padding: 6px 12px;
+    border: 1px solid #d0d0c8;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #1a1a1a;
+  }
+  button:hover { background: #f0f0eb; }
+  button.primary {
+    background: #1a1a1a;
+    color: #fff;
+    border-color: #1a1a1a;
+  }
+  button.primary:hover { background: #333; }
+  button.danger-link {
+    border: none;
+    background: transparent;
+    color: #c0392b;
+    padding: 2px 4px;
+    font-size: 12px;
+  }
+  button.danger-link:hover { text-decoration: underline; background: transparent; }
+  .spacer { flex: 1; }
+  .status {
+    font-size: 12px;
+    color: #666;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border: 1px solid #e5e5e0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: right;
+    padding: 8px 10px;
+    border-bottom: 1px solid #efefe8;
+    font-variant-numeric: tabular-nums;
+  }
+  th:first-child, td:first-child,
+  th:nth-child(2), td:nth-child(2) {
+    text-align: left;
+  }
+  th {
+    background: #faf9f6;
+    font-weight: 600;
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.symbol { font-weight: 600; }
+  td.desc { color: #555; font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.actions { text-align: right; }
+  .editable {
+    cursor: text;
+    border-bottom: 1px dashed #c8c8c0;
+  }
+  .editable:hover { background: #fbf6e8; }
+  input.cell-edit {
+    width: 90px;
+    padding: 3px 6px;
+    border: 1px solid #1a1a1a;
+    border-radius: 4px;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .add-form {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: 90px 1fr 110px 130px 110px auto;
+    gap: 8px;
+    padding: 12px;
+    background: #f7f7f5;
+    border: 1px solid #e5e5e0;
+    border-radius: 8px;
+    align-items: end;
+  }
+  .add-form label { font-size: 11px; color: #555; display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .add-form input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #d0d0c8;
+    border-radius: 5px;
+    font: inherit;
+  }
+  .add-form input:focus { outline: none; border-color: #1a1a1a; }
+
+  .banner {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: #fff7e0;
+    border: 1px solid #f0d77a;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #5a4400;
+    display: none;
+  }
+  .banner.show { display: block; }
+
+  tfoot td {
+    font-weight: 600;
+    background: #faf9f6;
+    border-top: 2px solid #1a1a1a;
+  }
+
+  @media (max-width: 720px) {
+    .summary { grid-template-columns: repeat(2, 1fr); }
+    .add-form { grid-template-columns: 1fr 1fr; }
+    td.desc { display: none; }
+    th:nth-child(2) { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Portfolio Tracker</h1>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="all">All Holdings <span class="tab-count" id="count-all">—</span></button>
+    <button class="tab" data-tab="ai">AI ETFs <span class="tab-count" id="count-ai">—</span></button>
+    <button class="tab" data-tab="lots">Cost Basis <span class="tab-count" id="count-lots">—</span></button>
+  </div>
+
+  <div id="holdings-view">
+  <div class="summary">
+    <div class="card">
+      <div class="label">Invested</div>
+      <div class="value neutral" id="sum-invested">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Current Value</div>
+      <div class="value neutral" id="sum-value">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Total Return ($)</div>
+      <div class="value" id="sum-return-dollar">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Total Return (%)</div>
+      <div class="value" id="sum-return-pct">—</div>
+    </div>
+  </div>
+
+  <div id="banner" class="banner"></div>
+
+  <div class="toolbar">
+    <button class="primary" id="btn-refresh">Refresh Prices</button>
+    <button id="btn-reset">Reset to Fidelity Export</button>
+    <div class="spacer"></div>
+    <span class="status" id="status">Prices as of May 26, 2026 (from Fidelity export)</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Symbol</th>
+        <th>Description</th>
+        <th>Shares</th>
+        <th>Avg Cost</th>
+        <th>Invested</th>
+        <th>Price</th>
+        <th>Value</th>
+        <th>Return $</th>
+        <th>Return %</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">Totals</td>
+        <td id="foot-invested">—</td>
+        <td></td>
+        <td id="foot-value">—</td>
+        <td id="foot-return-dollar">—</td>
+        <td id="foot-return-pct">—</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="add-form">
+    <div>
+      <label>Symbol</label>
+      <input id="add-symbol" type="text" placeholder="e.g. NVDA" autocomplete="off" />
+    </div>
+    <div>
+      <label>Description (optional)</label>
+      <input id="add-desc" type="text" placeholder="Nvidia Corp" autocomplete="off" />
+    </div>
+    <div>
+      <label>Shares</label>
+      <input id="add-shares" type="number" step="any" placeholder="0" />
+    </div>
+    <div>
+      <label>Total Invested ($)</label>
+      <input id="add-invested" type="number" step="any" placeholder="0.00" />
+    </div>
+    <div>
+      <label>Current Price ($)</label>
+      <input id="add-price" type="number" step="any" placeholder="0.00" />
+    </div>
+    <div>
+      <button class="primary" id="btn-add">Add Holding</button>
+    </div>
+  </div>
+  </div><!-- /holdings-view -->
+
+  <div id="lots-view" style="display:none;">
+    <div class="summary">
+      <div class="card">
+        <div class="label">Cost Basis Total</div>
+        <div class="value neutral" id="lot-sum-cost">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Current Value</div>
+        <div class="value neutral" id="lot-sum-value">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Total Gain/Loss ($)</div>
+        <div class="value" id="lot-sum-gl">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Total Gain/Loss (%)</div>
+        <div class="value" id="lot-sum-glpct">—</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="btn-lot-refresh">Refresh Prices</button>
+      <div class="spacer"></div>
+      <span class="status" id="lot-status">Current prices auto-populate from the market — click Refresh Prices.</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Acquired</th>
+          <th>Term</th>
+          <th>Quantity</th>
+          <th>Avg Cost Basis</th>
+          <th>Cost Basis Total</th>
+          <th>Current Price</th>
+          <th>Current Value</th>
+          <th>$ Total Gain/Loss</th>
+          <th>% Total Gain/Loss</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="lot-rows"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3">Totals</td>
+          <td id="lot-foot-qty"></td>
+          <td></td>
+          <td id="lot-foot-cost">—</td>
+          <td></td>
+          <td id="lot-foot-value">—</td>
+          <td id="lot-foot-gl">—</td>
+          <td id="lot-foot-glpct">—</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="add-form" id="lot-add-form">
+      <div>
+        <label>Symbol</label>
+        <input id="lot-symbol" type="text" placeholder="e.g. VOO" autocomplete="off" />
+      </div>
+      <div>
+        <label>Acquired</label>
+        <input id="lot-acquired" type="date" />
+      </div>
+      <div>
+        <label>Quantity</label>
+        <input id="lot-qty" type="number" step="any" placeholder="0" />
+      </div>
+      <div>
+        <label>Avg Cost Basis ($/share)</label>
+        <input id="lot-avgcost" type="number" step="any" placeholder="0.00" />
+      </div>
+      <div>
+        <button class="primary" id="btn-add-lot">Add Lot</button>
+      </div>
+    </div>
+  </div><!-- /lots-view -->
+</div>
+
+<script>
+"use strict";
+
+// ---- Seed data from Fidelity export May 26, 2026 ----
+const SEED = [
+  { account: "Traditional IRA", symbol: "AIQ",  desc: "Global X Artificial Intelligence ETF",     shares: 196.386,  invested: 9997.32,  price: 64.85 },
+  { account: "Traditional IRA", symbol: "VOO",  desc: "Vanguard S&P 500 ETF",                     shares: 83,       invested: 30115.24, price: 689.2801 },
+  { account: "Traditional IRA", symbol: "FBTC", desc: "Fidelity Wise Origin Bitcoin Fund",        shares: 542.241,  invested: 50032.52, price: 66.385 },
+  { account: "Rollover IRA",    symbol: "ARKQ", desc: "ARK Autonomous Tech & Robotics ETF",       shares: 178.799,  invested: 21009.05, price: 140.26 },
+  { account: "Rollover IRA",    symbol: "ARTY", desc: "iShares Future AI & Tech ETF",             shares: 433.168,  invested: 20961.00, price: 71.11 },
+  { account: "Rollover IRA",    symbol: "EQL",  desc: "ALPS Equal Sector Weight ETF",             shares: 452.352,  invested: 22499.99, price: 50.6502 },
+  { account: "ROTH IRA",        symbol: "WTAI", desc: "WisdomTree Artificial Intelligence ETF",   shares: 865.225,  invested: 25977.52, price: 43.12 },
+  { account: "ROTH IRA",        symbol: "ETH",  desc: "Grayscale Ethereum Mini Trust ETF",        shares: 1429.058, invested: 41980.72, price: 19.80 },
+];
+
+const STORAGE_KEY = "portfolio_tracker_v1";
+const AI_ETFS = new Set(["AIQ", "ARKQ", "ARTY", "WTAI"]);
+let activeTab = localStorage.getItem("portfolio_tracker_tab") || "all";
+
+function loadHoldings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.holdings)) return parsed.holdings;
+    }
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(SEED));
+}
+
+function saveHoldings(holdings) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ holdings, updatedAt: Date.now() }));
+}
+
+let holdings = loadHoldings();
+
+// ---- Cost-basis lots store ----
+const LOTS_KEY = "portfolio_tracker_lots_v1";
+function migrateLot(l) {
+  const o = Object.assign({}, l);
+  if (o.avgCost == null) {
+    o.avgCost = (o.costTotal != null) ? o.costTotal : 0;
+  }
+  delete o.costTotal;
+  delete o.price;
+  return o;
+}
+function loadLots() {
+  try {
+    const raw = localStorage.getItem(LOTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.lots)) return parsed.lots.map(migrateLot);
+    }
+  } catch (e) {}
+  return [];
+}
+function saveLots() {
+  localStorage.setItem(LOTS_KEY, JSON.stringify({ lots, updatedAt: Date.now() }));
+}
+let lots = loadLots();
+
+// ---- Shared live market-price cache ----
+const PRICES_KEY = "portfolio_tracker_prices_v1";
+function loadPrices() {
+  try {
+    const raw = localStorage.getItem(PRICES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.prices) return parsed.prices;
+    }
+  } catch (e) {}
+  return {};
+}
+function savePrices() {
+  localStorage.setItem(PRICES_KEY, JSON.stringify({ prices: marketPrices, updatedAt: Date.now() }));
+}
+let marketPrices = loadPrices();
+
+function currentPriceFor(sym) {
+  if (marketPrices[sym] != null && isFinite(marketPrices[sym])) return marketPrices[sym];
+  const h = holdings.find(x => x.symbol === sym);
+  if (h && isFinite(h.price)) return h.price;
+  return null;
+}
+
+// ---- Formatting ----
+const fmtMoney = (n) => {
+  if (!isFinite(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  return sign + "$" + abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+const fmtMoneySigned = (n) => {
+  if (!isFinite(n)) return "—";
+  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  return sign + "$" + abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+const fmtPct = (n) => {
+  if (!isFinite(n)) return "—";
+  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+  return sign + Math.abs(n).toFixed(2) + "%";
+};
+const fmtShares = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+const fmtPrice = (n) => "$" + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+function signClass(n) { return n > 0 ? "pos" : n < 0 ? "neg" : "neutral"; }
+
+// ---- Render ----
+function isVisible(h) {
+  if (activeTab === "ai") return AI_ETFS.has(h.symbol);
+  return true;
+}
+
+function render() {
+  const tbody = document.getElementById("rows");
+  tbody.innerHTML = "";
+
+  document.getElementById("count-all").textContent = holdings.length;
+  document.getElementById("count-ai").textContent = holdings.filter(h => AI_ETFS.has(h.symbol)).length;
+  document.getElementById("count-lots").textContent = lots.length;
+
+  document.querySelectorAll(".tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.tab === activeTab);
+  });
+
+  let totalInvested = 0, totalValue = 0;
+  let renderedAny = false;
+
+  holdings.forEach((h, idx) => {
+    if (!isVisible(h)) return;
+    renderedAny = true;
+    const value = (h.shares || 0) * (h.price || 0);
+    const ret$ = value - (h.invested || 0);
+    const retPct = h.invested > 0 ? (ret$ / h.invested) * 100 : 0;
+    const avgCost = h.shares > 0 ? h.invested / h.shares : 0;
+
+    totalInvested += h.invested || 0;
+    totalValue += value;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="symbol">${escapeHtml(h.symbol)}</td>
+      <td class="desc" title="${escapeHtml(h.desc || "")}${h.account ? " — " + escapeHtml(h.account) : ""}">${escapeHtml(h.desc || "")}</td>
+      <td class="editable" data-field="shares" data-idx="${idx}">${fmtShares(h.shares || 0)}</td>
+      <td>${fmtPrice(avgCost)}</td>
+      <td class="editable" data-field="invested" data-idx="${idx}">${fmtMoney(h.invested || 0)}</td>
+      <td class="editable" data-field="price" data-idx="${idx}">${fmtPrice(h.price || 0)}</td>
+      <td>${fmtMoney(value)}</td>
+      <td class="${signClass(ret$)}">${fmtMoneySigned(ret$)}</td>
+      <td class="${signClass(ret$)}">${fmtPct(retPct)}</td>
+      <td class="actions"><button class="danger-link" data-remove="${idx}">remove</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (!renderedAny) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="10" style="text-align:center;color:#888;padding:24px;font-style:italic;">No ${activeTab === "ai" ? "AI ETF" : ""} holdings to show. ${activeTab === "ai" ? "AI ETF tab tracks: AIQ, ARKQ, ARTY, WTAI." : ""}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  const totalReturn = totalValue - totalInvested;
+  const totalPct = totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
+
+  document.getElementById("sum-invested").textContent = fmtMoney(totalInvested);
+  document.getElementById("sum-value").textContent = fmtMoney(totalValue);
+  const retEl = document.getElementById("sum-return-dollar");
+  retEl.textContent = fmtMoneySigned(totalReturn);
+  retEl.className = "value " + signClass(totalReturn);
+  const pctEl = document.getElementById("sum-return-pct");
+  pctEl.textContent = fmtPct(totalPct);
+  pctEl.className = "value " + signClass(totalReturn);
+
+  document.getElementById("foot-invested").textContent = fmtMoney(totalInvested);
+  document.getElementById("foot-value").textContent = fmtMoney(totalValue);
+  const fr = document.getElementById("foot-return-dollar");
+  fr.textContent = fmtMoneySigned(totalReturn);
+  fr.className = signClass(totalReturn);
+  const fp = document.getElementById("foot-return-pct");
+  fp.textContent = fmtPct(totalPct);
+  fp.className = signClass(totalReturn);
+
+  wireEditable();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---- Inline editing ----
+function wireEditable() {
+  document.querySelectorAll("#holdings-view td.editable").forEach(td => {
+    td.addEventListener("click", () => beginEdit(td));
+  });
+  document.querySelectorAll("#holdings-view [data-remove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = +btn.dataset.remove;
+      const sym = holdings[i].symbol;
+      if (confirm(`Remove ${sym}?`)) {
+        holdings.splice(i, 1);
+        saveHoldings(holdings);
+        render();
+      }
+    });
+  });
+}
+
+function beginEdit(td) {
+  const idx = +td.dataset.idx;
+  const field = td.dataset.field;
+  const current = holdings[idx][field] || 0;
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "any";
+  input.className = "cell-edit";
+  input.value = current;
+  td.textContent = "";
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    const v = parseFloat(input.value);
+    if (isFinite(v) && v >= 0) {
+      holdings[idx][field] = v;
+      saveHoldings(holdings);
+    }
+    render();
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { render(); }
+  });
+}
+
+// ---- Add holding ----
+document.getElementById("btn-add").addEventListener("click", () => {
+  const symbol = document.getElementById("add-symbol").value.trim().toUpperCase();
+  const desc = document.getElementById("add-desc").value.trim();
+  const shares = parseFloat(document.getElementById("add-shares").value);
+  const invested = parseFloat(document.getElementById("add-invested").value);
+  const price = parseFloat(document.getElementById("add-price").value);
+  if (!symbol) { alert("Symbol is required"); return; }
+  if (!isFinite(shares) || shares <= 0) { alert("Shares must be > 0"); return; }
+  if (!isFinite(invested) || invested < 0) { alert("Invested must be a number"); return; }
+  if (!isFinite(price) || price < 0) { alert("Price must be a number"); return; }
+  holdings.push({ symbol, desc, shares, invested, price });
+  saveHoldings(holdings);
+  ["add-symbol","add-desc","add-shares","add-invested","add-price"].forEach(id => document.getElementById(id).value = "");
+  render();
+});
+
+// ---- Reset ----
+document.getElementById("btn-reset").addEventListener("click", () => {
+  if (confirm("Reset all holdings to the original Fidelity export?")) {
+    holdings = JSON.parse(JSON.stringify(SEED));
+    saveHoldings(holdings);
+    render();
+    setStatus("Prices as of May 26, 2026 (from Fidelity export)");
+    hideBanner();
+  }
+});
+
+// ---- Live price refresh (via Cloudflare Worker) ----
+function setStatus(s) {
+  document.getElementById("status").textContent = s;
+  const ls = document.getElementById("lot-status");
+  if (ls) ls.textContent = s;
+}
+function showBanner(html) { const b = document.getElementById("banner"); b.innerHTML = html; b.classList.add("show"); }
+function hideBanner() { document.getElementById("banner").classList.remove("show"); }
+
+async function fetchPrices(symbols) {
+  const url = `/api/prices?symbols=${encodeURIComponent(symbols.join(","))}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.prices || {};
+}
+
+// Fetch a price for a single symbol (used when adding a new lot).
+async function ensurePrice(sym) {
+  if (marketPrices[sym] != null) return;
+  try {
+    const prices = await fetchPrices([sym]);
+    if (prices[sym] != null) {
+      marketPrices[sym] = prices[sym];
+      savePrices();
+      renderLots();
+    }
+  } catch (e) {}
+}
+
+async function refreshPrices() {
+  const btns = [document.getElementById("btn-refresh"), document.getElementById("btn-lot-refresh")].filter(Boolean);
+  btns.forEach(b => { b.disabled = true; b.textContent = "Refreshing…"; });
+  hideBanner();
+  setStatus("Fetching live quotes…");
+
+  const symbols = Array.from(new Set([
+    ...holdings.map(h => h.symbol),
+    ...lots.map(l => l.symbol),
+  ].filter(Boolean)));
+
+  if (!symbols.length) {
+    setStatus("Nothing to refresh");
+    btns.forEach(b => { b.disabled = false; b.textContent = "Refresh Prices"; });
+    return;
+  }
+
+  let priceBySymbol;
+  try {
+    priceBySymbol = await fetchPrices(symbols);
+  } catch (err) {
+    showBanner(
+      `<strong>Couldn't refresh live prices.</strong> ` +
+      `Check your connection and try again. ` +
+      `You can always edit any price manually by clicking it in the table.<br>` +
+      `<span style="opacity:.7">Detail: ${escapeHtml(String(err.message).slice(0, 200))}</span>`
+    );
+    setStatus("Live refresh unavailable — prices unchanged");
+    btns.forEach(b => { b.disabled = false; b.textContent = "Refresh Prices"; });
+    return;
+  }
+
+  const updatedSyms = Object.keys(priceBySymbol);
+  const missed = symbols.filter(s => priceBySymbol[s] == null);
+
+  if (!updatedSyms.length) {
+    showBanner(`<strong>No prices returned.</strong> Yahoo Finance may be temporarily unavailable. Try again in a moment.`);
+    setStatus("Live refresh unavailable — prices unchanged");
+    btns.forEach(b => { b.disabled = false; b.textContent = "Refresh Prices"; });
+    return;
+  }
+
+  updatedSyms.forEach(s => { marketPrices[s] = priceBySymbol[s]; });
+  savePrices();
+  holdings.forEach(h => { if (priceBySymbol[h.symbol] != null) h.price = priceBySymbol[h.symbol]; });
+  saveHoldings(holdings);
+  render();
+  renderLots();
+
+  const now = new Date();
+  setStatus(`Prices refreshed ${now.toLocaleString()} — ${updatedSyms.length} updated${missed.length ? `, missed: ${missed.join(", ")}` : ""}`);
+  btns.forEach(b => { b.disabled = false; b.textContent = "Refresh Prices"; });
+}
+
+document.getElementById("btn-refresh").addEventListener("click", refreshPrices);
+
+// ---- Cost-basis lots ----
+function fmtAcqDate(s) {
+  const d = new Date(s + "T00:00:00");
+  if (isNaN(d)) return s || "—";
+  const mo = d.toLocaleString("en-US", { month: "short" });
+  return `${mo}-${String(d.getDate()).padStart(2, "0")}-${d.getFullYear()}`;
+}
+
+function termFor(s) {
+  const d = new Date(s + "T00:00:00");
+  if (isNaN(d)) return "—";
+  const oneYearLater = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate());
+  return new Date() > oneYearLater ? "Long" : "Short";
+}
+
+function renderLots() {
+  const tbody = document.getElementById("lot-rows");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  document.getElementById("count-lots").textContent = lots.length;
+
+  lots.sort((a, b) =>
+    a.symbol.localeCompare(b.symbol) ||
+    (a.acquired < b.acquired ? -1 : a.acquired > b.acquired ? 1 : 0)
+  );
+
+  let tQty = 0, tCost = 0, tValue = 0;
+
+  if (!lots.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="11" style="text-align:center;color:#888;padding:24px;font-style:italic;">No lots yet. Add a purchase lot below.</td>`;
+    tbody.appendChild(tr);
+  }
+
+  let tCostPriced = 0;
+
+  lots.forEach((l, idx) => {
+    const qty = l.qty || 0;
+    const avg = l.avgCost || 0;
+    const cost = qty * avg;
+    const price = currentPriceFor(l.symbol);
+    const priced = price != null;
+    const value = priced ? qty * price : 0;
+    const gl = value - cost;
+    const glPct = cost > 0 ? (gl / cost) * 100 : 0;
+
+    tQty += qty; tCost += cost;
+    if (priced) { tValue += value; tCostPriced += cost; }
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="symbol editable" data-lfield="symbol" data-lidx="${idx}">${escapeHtml(l.symbol)}</td>
+      <td class="editable" data-lfield="acquired" data-lidx="${idx}">${fmtAcqDate(l.acquired)}</td>
+      <td>${termFor(l.acquired)}</td>
+      <td class="editable" data-lfield="qty" data-lidx="${idx}">${fmtShares(qty)}</td>
+      <td class="editable" data-lfield="avgCost" data-lidx="${idx}">${fmtPrice(avg)}</td>
+      <td class="editable" data-lfield="costTotal" data-lidx="${idx}">${fmtMoney(cost)}</td>
+      <td>${priced ? fmtPrice(price) : "—"}</td>
+      <td>${priced ? fmtMoney(value) : "—"}</td>
+      <td class="${priced ? signClass(gl) : "neutral"}">${priced ? fmtMoneySigned(gl) : "—"}</td>
+      <td class="${priced ? signClass(gl) : "neutral"}">${priced ? fmtPct(glPct) : "—"}</td>
+      <td class="actions"><button class="danger-link" data-lremove="${idx}">remove</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const totalGl = tValue - tCostPriced;
+  const totalPct = tCostPriced > 0 ? (totalGl / tCostPriced) * 100 : 0;
+
+  document.getElementById("lot-sum-cost").textContent = fmtMoney(tCost);
+  document.getElementById("lot-sum-value").textContent = fmtMoney(tValue);
+  const glEl = document.getElementById("lot-sum-gl");
+  glEl.textContent = fmtMoneySigned(totalGl);
+  glEl.className = "value " + signClass(totalGl);
+  const glPctEl = document.getElementById("lot-sum-glpct");
+  glPctEl.textContent = fmtPct(totalPct);
+  glPctEl.className = "value " + signClass(totalGl);
+
+  document.getElementById("lot-foot-qty").textContent = fmtShares(tQty);
+  document.getElementById("lot-foot-cost").textContent = fmtMoney(tCost);
+  document.getElementById("lot-foot-value").textContent = fmtMoney(tValue);
+  const fg = document.getElementById("lot-foot-gl");
+  fg.textContent = fmtMoneySigned(totalGl);
+  fg.className = signClass(totalGl);
+  const fgp = document.getElementById("lot-foot-glpct");
+  fgp.textContent = fmtPct(totalPct);
+  fgp.className = signClass(totalGl);
+
+  wireLotEditable();
+}
+
+function wireLotEditable() {
+  document.querySelectorAll("#lots-view td.editable").forEach(td => {
+    td.addEventListener("click", () => beginLotEdit(td));
+  });
+  document.querySelectorAll("#lots-view [data-lremove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = +btn.dataset.lremove;
+      const l = lots[i];
+      if (confirm(`Remove ${l.symbol} lot acquired ${fmtAcqDate(l.acquired)}?`)) {
+        lots.splice(i, 1);
+        saveLots();
+        renderLots();
+      }
+    });
+  });
+}
+
+function beginLotEdit(td) {
+  const idx = +td.dataset.lidx;
+  const field = td.dataset.lfield;
+  const isText = field === "symbol";
+  const isDate = field === "acquired";
+  const input = document.createElement("input");
+  input.className = "cell-edit";
+
+  if (isText) {
+    input.type = "text";
+    input.value = lots[idx].symbol || "";
+    input.style.width = "80px";
+    input.style.textAlign = "left";
+  } else if (isDate) {
+    input.type= "date";
+    input.value = lots[idx].acquired || "";
+    input.style.width = "140px";
+  } else {
+    input.type = "number";
+    input.step = "any";
+    const qty = lots[idx].qty || 0;
+    input.value = field === "costTotal" ? (qty * (lots[idx].avgCost || 0)) : (lots[idx][field] || 0);
+  }
+
+  td.textContent = "";
+  td.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+
+  const commit = () => {
+    if (isText) {
+      const v = input.value.trim().toUpperCase();
+      if (v) {
+        lots[idx].symbol = v;
+        saveLots();
+        ensurePrice(v);
+      }
+    } else if (isDate) {
+      if (input.value) {
+        lots[idx].acquired = input.value;
+        saveLots();
+      }
+    } else {
+      const v = parseFloat(input.value);
+      if (isFinite(v) && v >= 0) {
+        if (field === "costTotal") {
+          const qty = lots[idx].qty || 0;
+          lots[idx].avgCost = qty > 0 ? v / qty : 0;
+        } else {
+          lots[idx][field] = v;
+        }
+        saveLots();
+      }
+    }
+    renderLots();
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { renderLots(); }
+  });
+}
+
+document.getElementById("btn-add-lot").addEventListener("click", () => {
+  const symbol = document.getElementById("lot-symbol").value.trim().toUpperCase();
+  const acquired = document.getElementById("lot-acquired").value;
+  const qty = parseFloat(document.getElementById("lot-qty").value);
+  const avgCost = parseFloat(document.getElementById("lot-avgcost").value);
+  if (!symbol) { alert("Symbol is required"); return; }
+  if (!acquired$) { alert("Acquired date is required"); return; }
+  if (!isFinite(qty) || qty <= 0) { alert("Quantity must be > 0"); return; }
+  if (!isFinite(avgCost) || avgCost < 0) { alert("Avg cost basis must be a number"); return; }
+  lots.push({ symbol, acquired, qty, avgCost });
+  saveLots();
+  ["lot-symbol","lot-acquired","lot-qty","lot-avgcost"].forEach(id => document.getElementById(id).value = "");
+  renderLots();
+  ensurePrice(symbol);
+});
+
+document.getElementById("btn-lot-refresh").addEventListener("click", refreshPrices);
+
+// ---- Tab navigation ----
+function applyTabVisibility() {
+  const isLots = activeTab === "lots";
+  document.getElementById("holdings-view").style.display = isLots ? "none" : "";
+  document.getElementById("lots-view").style.display = isLots ? "" : "none";
+}
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    activeTab = tab.dataset.tab;
+    localStorage.setItem("portfolio_tracker_tab", activeTab);
+    applyTabVisibility();
+    render();
+    renderLots();
+  });
+});
+
+applyTabVisibility();
+render();
+renderLots();
+</script>
+</body>
+</html>
