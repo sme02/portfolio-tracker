@@ -356,8 +356,8 @@
     <table>
       <thead>
         <tr>
-          <th>Symbol</th>
-          <th>Acquired</th>
+          <th data-sort="symbol" data-label="Symbol">Symbol</th>
+          <th data-sort="acquired" data-label="Acquired">Acquired</th>
           <th>Term</th>
           <th>Quantity</th>
           <th>Avg Cost Basis</th>
@@ -471,6 +471,10 @@ function saveLots() {
 }
 let lots = loadLots();
 
+// ---- Cost-basis sort state ----
+let lotSortCol = "symbol"; // "symbol" | "acquired"
+let lotSortDir = 1;        // 1 = asc, -1 = desc
+
 // ---- Shared live market-price cache ----
 const PRICES_KEY = "portfolio_tracker_prices_v1";
 function loadPrices() {
@@ -524,6 +528,15 @@ function isVisible(h) {
   return true;
 }
 
+// For AI ETFs tab: if lots exist for this symbol, derive shares/invested from them
+function holdingWithLots(h) {
+  const symbolLots = lots.filter(l => l.symbol === h.symbol);
+  if (activeTab !== "ai" || symbolLots.length === 0) return h;
+  const totalQty  = symbolLots.reduce((s, l) => s + (l.qty || 0), 0);
+  const totalCost = symbolLots.reduce((s, l) => s + (l.qty || 0) * (l.avgCost || 0), 0);
+  return { ...h, shares: totalQty, invested: totalCost };
+}
+
 function render() {
   const tbody = document.getElementById("rows");
   tbody.innerHTML = "";
@@ -542,21 +555,22 @@ function render() {
   holdings.forEach((h, idx) => {
     if (!isVisible(h)) return;
     renderedAny = true;
-    const value = (h.shares || 0) * (h.price || 0);
-    const ret$ = value - (h.invested || 0);
-    const retPct = h.invested > 0 ? (ret$ / h.invested) * 100 : 0;
-    const avgCost = h.shares > 0 ? h.invested / h.shares : 0;
+    const d = holdingWithLots(h);
+    const value = (d.shares || 0) * (h.price || 0);
+    const ret$ = value - (d.invested || 0);
+    const retPct = d.invested > 0 ? (ret$ / d.invested) * 100 : 0;
+    const avgCost = d.shares > 0 ? d.invested / d.shares : 0;
 
-    totalInvested += h.invested || 0;
+    totalInvested += d.invested || 0;
     totalValue += value;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="symbol">${escapeHtml(h.symbol)}</td>
       <td class="desc" title="${escapeHtml(h.desc || "")}${h.account ? " — " + escapeHtml(h.account) : ""}">${escapeHtml(h.desc || "")}</td>
-      <td class="editable" data-field="shares" data-idx="${idx}">${fmtShares(h.shares || 0)}</td>
+      <td>${fmtShares(d.shares || 0)}</td>
       <td>${fmtPrice(avgCost)}</td>
-      <td class="editable" data-field="invested" data-idx="${idx}">${fmtMoney(h.invested || 0)}</td>
+      <td>${fmtMoney(d.invested || 0)}</td>
       <td class="editable" data-field="price" data-idx="${idx}">${fmtPrice(h.price || 0)}</td>
       <td>${fmtMoney(value)}</td>
       <td class="${signClass(ret$)}">${fmtMoneySigned(ret$)}</td>
@@ -783,10 +797,13 @@ function renderLots() {
   tbody.innerHTML = "";
   document.getElementById("count-lots").textContent = lots.length;
 
-  lots.sort((a, b) =>
-    a.symbol.localeCompare(b.symbol) ||
-    (a.acquired < b.acquired ? -1 : a.acquired > b.acquired ? 1 : 0)
-  );
+  lots.sort((a, b) => {
+    let cmp = 0;
+    if (lotSortCol === "symbol")   cmp = a.symbol.localeCompare(b.symbol);
+    if (lotSortCol === "acquired") cmp = a.acquired < b.acquired ? -1 : a.acquired > b.acquired ? 1 : 0;
+    if (cmp === 0) cmp = a.symbol.localeCompare(b.symbol) || (a.acquired < b.acquired ? -1 : a.acquired > b.acquired ? 1 : 0);
+    return cmp * lotSortDir;
+  });
 
   let tQty = 0, tCost = 0, tValue = 0;
 
@@ -850,7 +867,23 @@ function renderLots() {
   fgp.textContent = fmtPct(totalPct);
   fgp.className = signClass(totalGl);
 
+  wireLotHeaders();
   wireLotEditable();
+}
+
+function wireLotHeaders() {
+  document.querySelectorAll("#lots-view th[data-sort]").forEach(th => {
+    th.style.cursor = "pointer";
+    th.style.userSelect = "none";
+    const col = th.dataset.sort;
+    const arrow = col === lotSortCol ? (lotSortDir === 1 ? " ▲" : " ▼") : "";
+    th.textContent = th.dataset.label + arrow;
+    th.onclick = () => {
+      if (lotSortCol === col) lotSortDir *= -1;
+      else { lotSortCol = col; lotSortDir = 1; }
+      renderLots();
+    };
+  });
 }
 
 function wireLotEditable() {
