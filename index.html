@@ -207,6 +207,7 @@
     <button class="tab active" data-tab="all">All Holdings <span class="tab-count" id="count-all">—</span></button>
     <button class="tab" data-tab="ai">AI ETFs <span class="tab-count" id="count-ai">—</span></button>
     <button class="tab" data-tab="lots">Cost Basis <span class="tab-count" id="count-lots">—</span></button>
+    <button class="tab" data-tab="viz">Visualize <span class="tab-count" id="count-viz">—</span></button>
   </div>
 
   <div id="holdings-view">
@@ -407,6 +408,16 @@
       </div>
     </div>
   </div><!-- /lots-view -->
+
+  <div id="viz-view" style="display:none;">
+    <div class="toolbar">
+      <button class="primary" id="btn-viz-refresh">Refresh Prices</button>
+      <button id="btn-viz-add">+ Add period</button>
+      <div class="spacer"></div>
+      <span class="status" id="viz-status"></span>
+    </div>
+    <div id="viz-cards"></div>
+  </div><!-- /viz-view -->
 </div>
 
 <script>
@@ -796,6 +807,8 @@ function renderLots() {
   if (!tbody) return;
   tbody.innerHTML = "";
   document.getElementById("count-lots").textContent = lots.length;
+  const vizCountEl = document.getElementById("count-viz");
+  if (vizCountEl) vizCountEl.textContent = Object.keys(groupLotsByPeriod(lots)).length || "—";
 
   lots.sort((a, b) => {
     let cmp = 0;
@@ -1075,11 +1088,201 @@ function parseFidelityCSV(text) {
   )
 );
 
+// ---- Visualization ----
+let vizPeriods = null;
+let vizCharts = {};
+const vizFull  = { AIQ:"#7F77DD", ARKQ:"#EF9F27", ARTY:"#1D9E75", WTAI:"#378ADD", EQL:"#D85A30", ETH:"#7F77DD", FBTC:"#EF9F27", VOO:"#378ADD" };
+const vizLight = { AIQ:"rgba(127,119,221,.28)", ARKQ:"rgba(239,159,39,.28)", ARTY:"rgba(29,158,117,.28)", WTAI:"rgba(55,138,221,.28)", EQL:"rgba(216,90,48,.28)", ETH:"rgba(127,119,221,.28)", FBTC:"rgba(239,159,39,.28)", VOO:"rgba(55,138,221,.28)" };
+
+function groupLotsByPeriod(lotsArr) {
+  const g = {};
+  lotsArr.forEach(l => {
+    const d = new Date(l.acquired + "T00:00:00");
+    if (isNaN(d)) return;
+    const k = d.toLocaleString("en-US", { month:"short", year:"numeric" });
+    if (!g[k]) g[k] = [];
+    g[k].push(l);
+  });
+  return g;
+}
+
+function parsePeriodDate(p) {
+  const [mon, yr] = p.split(" ");
+  const m = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  return new Date(+yr, m[mon] || 0, 1);
+}
+
+function vizAggBySymbol(periodLots) {
+  const map = {};
+  periodLots.forEach(l => {
+    if (!map[l.symbol]) map[l.symbol] = { symbol:l.symbol, qty:0, totalCost:0 };
+    map[l.symbol].qty += (l.qty || 0);
+    map[l.symbol].totalCost += (l.qty || 0) * (l.avgCost || 0);
+  });
+  return Object.values(map).map(s => {
+    const cur = currentPriceFor(s.symbol);
+    return { symbol:s.symbol, qty:s.qty, avgCost:s.qty > 0 ? s.totalCost/s.qty : 0, current:cur || 0, hasPrce:cur != null };
+  }).filter(s => s.qty > 0);
+}
+
+const vizEndLabels = {
+  id: "vizEndLabels",
+  afterDraw(chart) {
+    if (!chart._vizAgg) return;
+    const ctx = chart.ctx;
+    const dark = matchMedia("(prefers-color-scheme:dark)").matches;
+    const meta = chart.getDatasetMeta(1);
+    chart._vizAgg.forEach((d, i) => {
+      const bar = meta.data[i];
+      if (!bar || !d.hasPrce) return;
+      const pct = (d.current - d.avgCost) / d.avgCost * 100;
+      ctx.save();
+      ctx.font = "500 11px system-ui,-apple-system,sans-serif";
+      ctx.fillStyle = dark ? "#aaa" : "#555";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText((pct >= 0 ? "+" : "") + pct.toFixed(1) + "%", bar.x + 6, bar.y);
+      ctx.restore();
+    });
+  }
+};
+
+function renderViz() {
+  if (activeTab !== "viz") return;
+  if (!window.Chart) {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js";
+    s.onload = renderViz;
+    document.head.appendChild(s);
+    return;
+  }
+  Object.values(vizCharts).forEach(c => c.destroy());
+  vizCharts = {};
+  const allGroups = groupLotsByPeriod(lots);
+  const allPeriods = Object.keys(allGroups).sort((a,b) => parsePeriodDate(a) - parsePeriodDate(b));
+  const cards = document.getElementById("viz-cards");
+  if (!allPeriods.length) {
+    cards.innerHTML = "<p style=\"text-align:center;color:var(--color-text-secondary);padding:32px;font-size:14px;\">Add lots in the Cost Basis tab to see charts here.</p>";
+    return;
+  }
+  if (!vizPeriods || !vizPeriods.length) vizPeriods = [...allPeriods];
+  vizPeriods = vizPeriods.filter(p => allGroups[p]);
+  if (!vizPeriods.length) vizPeriods = [...allPeriods];
+  cards.innerHTML = "";
+  const dark = matchMedia("(prefers-color-scheme:dark)").matches;
+  const gridClr = dark ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.06)";
+  const tickClr = dark ? "#999" : "#777";
+  const lblClr  = dark ? "#ccc" : "#333";
+
+  vizPeriods.forEach((period, i) => {
+    const agg = vizAggBySymbol(allGroups[period] || []).sort((a,b) => {
+      const ra = a.hasPrce ? (a.current-a.avgCost)/a.avgCost : -Infinity;
+      const rb = b.hasPrce ? (b.current-b.avgCost)/b.avgCost : -Infinity;
+      return rb - ra;
+    });
+    const cid = "vizch" + i;
+    const card = document.createElement("div");
+    card.style.cssText = "background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;margin-bottom:1rem;";
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;";
+    const pLbl = document.createElement("span");
+    pLbl.style.cssText = "font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary);white-space:nowrap;";
+    pLbl.textContent = "Acquisition period";
+    const sel = document.createElement("select");
+    sel.style.cssText = "font-size:13px;padding:5px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary);color:var(--color-text-primary);cursor:pointer;";
+    allPeriods.forEach(p => { const o = document.createElement("option"); o.value=p; o.textContent=p; o.selected=p===period; sel.appendChild(o); });
+    sel.onchange = () => { vizPeriods[i] = sel.value; renderViz(); };
+    hdr.appendChild(pLbl); hdr.appendChild(sel);
+    if (i > 0) {
+      const rm = document.createElement("button");
+      rm.style.cssText = "margin-left:auto;border:none;background:transparent;color:var(--color-text-secondary);font-size:18px;cursor:pointer;padding:0 4px;line-height:1;";
+      rm.textContent = "×";
+      rm.onclick = () => { vizPeriods.splice(i,1); renderViz(); };
+      hdr.appendChild(rm);
+    }
+    card.appendChild(hdr);
+    if (!agg.length) {
+      card.innerHTML += "<p style=\"font-size:13px;color:var(--color-text-secondary);margin:0;\">No priced lots for this period.</p>";
+      cards.appendChild(card); return;
+    }
+    const totalInv  = agg.reduce((s,d) => s + d.qty*d.avgCost, 0);
+    const totalGain = agg.reduce((s,d) => s + (d.hasPrce ? d.qty*(d.current-d.avgCost) : 0), 0);
+    const blended   = totalInv > 0 ? totalGain/totalInv*100 : 0;
+    const stats = document.createElement("div");
+    stats.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;";
+    [["Invested","$"+Math.round(totalInv).toLocaleString(),"var(--color-text-primary)"],
+     ["Gain","+$"+Math.round(totalGain).toLocaleString(),"#1D9E75"],
+     ["Return","+"+blended.toFixed(1)+"%","#1D9E75"]].forEach(([l,v,c]) => {
+      const mc = document.createElement("div");
+      mc.style.cssText = "background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:7px 12px;";
+      mc.innerHTML = "<div style=\"font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em\">"+l+"</div><div style=\"font-size:15px;font-weight:500;color:"+c+";margin-top:2px\">"+v+"</div>";
+      stats.appendChild(mc);
+    });
+    card.appendChild(stats);
+    const leg = document.createElement("div");
+    leg.style.cssText = "display:flex;gap:14px;font-size:12px;color:var(--color-text-secondary);margin-bottom:10px;";
+    leg.innerHTML = "<span style=\"display:flex;align-items:center;gap:4px;\"><span style=\"display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(100,100,200,.3);\"></span>Invested</span>"
+                  + "<span style=\"display:flex;align-items:center;gap:4px;\"><span style=\"display:inline-block;width:10px;height:10px;border-radius:2px;background:#1D9E75;\"></span>Gain</span>";
+    card.appendChild(leg);
+    const h = agg.length * 48 + 50;
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "position:relative;width:100%;height:"+h+"px;";
+    const cv = document.createElement("canvas");
+    cv.id = cid;
+    cv.setAttribute("role","img");
+    cv.setAttribute("aria-label","Stacked return bars for "+period);
+    wrap.appendChild(cv); card.appendChild(wrap); cards.appendChild(card);
+    const ci = new Chart(cv, {
+      type:"bar", plugins:[vizEndLabels],
+      data:{
+        labels:agg.map(d=>d.symbol),
+        datasets:[
+          { label:"Invested", data:agg.map(d=>Math.round(d.qty*d.avgCost)), backgroundColor:agg.map(d=>vizLight[d.symbol]||"rgba(0,0,0,.2)"), borderRadius:{topLeft:4,bottomLeft:4,topRight:0,bottomRight:0}, borderSkipped:false, stack:"s" },
+          { label:"Gain", data:agg.map(d=>d.hasPrce?Math.round(d.qty*(d.current-d.avgCost)):0), backgroundColor:agg.map(d=>vizFull[d.symbol]||"#888"), borderRadius:{topLeft:0,bottomLeft:0,topRight:4,bottomRight:4}, borderSkipped:false, stack:"s" }
+        ]
+      },
+      options:{
+        indexAxis:"y", responsive:true, maintainAspectRatio:false, layout:{padding:{right:60}},
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{
+            title:ctx=>ctx[0].label,
+            label:ctx=>{
+              const d=agg[ctx.dataIndex];
+              if(ctx.datasetIndex===0) return "  Invested: $"+Math.round(d.qty*d.avgCost).toLocaleString()+"  ("+d.qty.toFixed(3)+" shares @ $"+d.avgCost.toFixed(2)+")";
+              const g=d.hasPrce?d.qty*(d.current-d.avgCost):0;
+              const pct=d.hasPrce?(((d.current-d.avgCost)/d.avgCost)*100).toFixed(1):"?";
+              return "  Gain: +$"+Math.round(g).toLocaleString()+"  (+"+pct+"%)";
+            }
+          }}
+        },
+        scales:{
+          x:{ stacked:true, grid:{color:gridClr}, ticks:{color:tickClr, callback:v=>v>=1000?"$"+Math.round(v/1000)+"K":"$"+v}, border:{display:false} },
+          y:{ stacked:true, grid:{display:false}, ticks:{color:lblClr, font:{size:13,weight:"500"}}, border:{display:false} }
+        }
+      }
+    });
+    ci._vizAgg = agg; vizCharts[cid] = ci;
+  });
+}
+
+document.getElementById("btn-viz-refresh").addEventListener("click", () => {
+  refreshPrices().then(() => renderViz());
+});
+document.getElementById("btn-viz-add").addEventListener("click", () => {
+  const ag = groupLotsByPeriod(lots);
+  const ap = Object.keys(ag).sort((a,b) => parsePeriodDate(a)-parsePeriodDate(b));
+  if (!vizPeriods) vizPeriods = [...ap];
+  const unused = ap.find(p => !vizPeriods.includes(p));
+  vizPeriods.push(unused || ap[0]);
+  renderViz();
+});
+
 // ---- Tab navigation ----
 function applyTabVisibility() {
-  const isLots = activeTab === "lots";
-  document.getElementById("holdings-view").style.display = isLots ? "none" : "";
-  document.getElementById("lots-view").style.display = isLots ? "" : "none";
+  document.getElementById("holdings-view").style.display = (activeTab === "lots" || activeTab === "viz") ? "none" : "";
+  document.getElementById("lots-view").style.display = activeTab === "lots" ? "" : "none";
+  document.getElementById("viz-view").style.display = activeTab === "viz" ? "" : "none";
 }
 
 document.querySelectorAll(".tab").forEach(tab => {
@@ -1089,6 +1292,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     applyTabVisibility();
     render();
     renderLots();
+    if (activeTab === "viz") renderViz();
   });
 });
 
