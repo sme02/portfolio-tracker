@@ -22,21 +22,25 @@ export async function onRequestGet(context) {
           symbols.map((sym) =>
                     fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_TOKEN}`)
                               .then((r) => r.json())
-                              .then((data) => ({ sym, price: data.c }))
+                              .then((data) => ({ sym, price: data.c , prevClose: data.pc}))
                           )
         );
 
   const prices = {};
       const missed = [];
+            const prevClose = {};
       results.forEach((r, i) => {
               if (r.status === "fulfilled" && typeof r.value.price === "number" && r.value.price > 0) {
                         prices[r.value.sym] = r.value.price;
+                                          if (typeof r.value.prevClose === "number" && r.value.prevClose > 0) {
+                                                              prevClose[r.value.sym] = r.value.prevClose;
+                                                                                }
               } else {
                         missed.push(symbols[i]);
               }
       });
 
-  const response = json({ prices, updatedAt: new Date().toISOString(), missed }, 200);
+  const response = json({ prices, prevClose, updatedAt: new Date().toISOString(), missed }, 200);
       response.headers.set("Cache-Control", `public, max-age=${CACHE_TTL}`);
       response.headers.set("Access-Control-Allow-Origin", "*");
       return response;
