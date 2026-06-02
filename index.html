@@ -906,7 +906,7 @@ document.getElementById("btn-add-lot").addEventListener("click", () => {
   const qty = parseFloat(document.getElementById("lot-qty").value);
   const avgCost = parseFloat(document.getElementById("lot-avgcost").value);
   if (!symbol) { alert("Symbol is required"); return; }
-  if (!acquired$) { alert("Acquired date is required"); return; }
+  if (!acquired) { alert("Acquired date is required"); return; }
   if (!isFinite(qty) || qty <= 0) { alert("Quantity must be > 0"); return; }
   if (!isFinite(avgCost) || avgCost < 0) { alert("Avg cost basis must be a number"); return; }
   lots.push({ symbol, acquired, qty, avgCost });
