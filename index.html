@@ -54,7 +54,7 @@
   .tab.active .tab-count { background: #1a1a1a; color: #fff; }
   .summary {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 10px;
     margin-bottom: 16px;
   }
@@ -228,6 +228,10 @@
       <div class="label">Total Return (%)</div>
       <div class="value" id="sum-return-pct">—</div>
     </div>
+    <div class="card">
+      <div class="label">Return$ Today</div>
+      <div class="value" id="sum-return-today">—</div>
+    </div>
   </div>
 
   <div id="banner" class="banner"></div>
@@ -249,6 +253,7 @@
         <th>Invested</th>
         <th>Price</th>
         <th>Value</th>
+        <th>Return $ Today</th>
         <th>Return $</th>
         <th>Return %</th>
         <th></th>
@@ -261,6 +266,7 @@
         <td id="foot-invested">—</td>
         <td></td>
         <td id="foot-value">—</td>
+        <td id="foot-return-today">—</td>
         <td id="foot-return-dollar">—</td>
         <td id="foot-return-pct">—</td>
         <td></td>
@@ -503,6 +509,11 @@ function savePrices() {
 }
 let marketPrices = loadPrices();
 
+const PREV_KEY = "portfolio_tracker_prevclose_v1";
+function loadPrevClose() { try { const r=localStorage.getItem(PREV_KEY); if(r){const p=JSON.parse(r);if(p&&p.prevClose)return p.prevClose;} } catch(e){} return {}; }
+function savePrevClose() { localStorage.setItem(PREV_KEY,JSON.stringify({prevClose:prevClosePrices,updatedAt:Date.now()})); }
+let prevClosePrices = loadPrevClose();
+
 function currentPriceFor(sym) {
   if (marketPrices[sym] != null && isFinite(marketPrices[sym])) return marketPrices[sym];
   const h = holdings.find(x => x.symbol === sym);
@@ -542,7 +553,7 @@ function isVisible(h) {
 // For AI ETFs tab: if lots exist for this symbol, derive shares/invested from them
 function holdingWithLots(h) {
   const symbolLots = lots.filter(l => l.symbol === h.symbol);
-  if (activeTab !== "ai" || symbolLots.length === 0) return h;
+  if (symbolLots.length === 0) return h;
   const totalQty  = symbolLots.reduce((s, l) => s + (l.qty || 0), 0);
   const totalCost = symbolLots.reduce((s, l) => s + (l.qty || 0) * (l.avgCost || 0), 0);
   return { ...h, shares: totalQty, invested: totalCost };
@@ -560,7 +571,8 @@ function render() {
     t.classList.toggle("active", t.dataset.tab === activeTab);
   });
 
-  let totalInvested = 0, totalValue = 0;
+  let totalInvested = 0, totalValue = 0, totalReturnToday = 0;
+  let hasTodayData = false;
   let renderedAny = false;
 
   holdings.forEach((h, idx) => {
@@ -571,6 +583,9 @@ function render() {
     const ret$ = value - (d.invested || 0);
     const retPct = d.invested > 0 ? (ret$ / d.invested) * 100 : 0;
     const avgCost = d.shares > 0 ? d.invested / d.shares : 0;
+    const pc = prevClosePrices[h.symbol];
+    const todayRet = (pc != null && isFinite(pc)) ? (h.price - pc) * (d.shares || 0) : null;
+    if (todayRet != null) { totalReturnToday += todayRet; hasTodayData = true; }
 
     totalInvested += d.invested || 0;
     totalValue += value;
@@ -584,6 +599,7 @@ function render() {
       <td>${fmtMoney(d.invested || 0)}</td>
       <td class="editable" data-field="price" data-idx="${idx}">${fmtPrice(h.price || 0)}</td>
       <td>${fmtMoney(value)}</td>
+      <td class="${todayRet != null ? signClass(todayRet) : "neutral"}">${todayRet != null ? fmtMoneySigned(todayRet) : "—"}</td>
       <td class="${signClass(ret$)}">${fmtMoneySigned(ret$)}</td>
       <td class="${signClass(ret$)}">${fmtPct(retPct)}</td>
       <td class="actions"><button class="danger-link" data-remove="${idx}">remove</button></td>
@@ -593,7 +609,7 @@ function render() {
 
   if (!renderedAny) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="10" style="text-align:center;color:#888;padding:24px;font-style:italic;">No ${activeTab === "ai" ? "AI ETF" : ""} holdings to show. ${activeTab === "ai" ? "AI ETF tab tracks: AIQ, ARKQ, ARTY, WTAI." : ""}</td>`;
+    tr.innerHTML = `<td colspan="11" style="text-align:center;color:#888;padding:24px;font-style:italic;">No ${activeTab === "ai" ? "AI ETF" : ""} holdings to show. ${activeTab === "ai" ? "AI ETF tab tracks: AIQ, ARKQ, ARTY, WTAI." : ""}</td>`;
     tbody.appendChild(tr);
   }
 
@@ -609,8 +625,15 @@ function render() {
   pctEl.textContent = fmtPct(totalPct);
   pctEl.className = "value " + signClass(totalReturn);
 
+  const todayEl = document.getElementById("sum-return-today");
+  todayEl.textContent = hasTodayData ? fmtMoneySigned(totalReturnToday) : "Refresh prices";
+  todayEl.className = "value " + (hasTodayData ? signClass(totalReturnToday) : "neutral");
+
   document.getElementById("foot-invested").textContent = fmtMoney(totalInvested);
   document.getElementById("foot-value").textContent = fmtMoney(totalValue);
+  const frt = document.getElementById("foot-return-today");
+  frt.textContent = hasTodayData ? fmtMoneySigned(totalReturnToday) : "—";
+  frt.className = hasTodayData ? signClass(totalReturnToday) : "neutral";
   const fr = document.getElementById("foot-return-dollar");
   fr.textContent = fmtMoneySigned(totalReturn);
   fr.className = signClass(totalReturn);
@@ -715,16 +738,17 @@ async function fetchPrices(symbols) {
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  return data.prices || {};
+  return { prices: data.prices || {}, prevClose: data.prevClose || {} };
 }
 
 // Fetch a price for a single symbol (used when adding a new lot).
 async function ensurePrice(sym) {
   if (marketPrices[sym] != null) return;
   try {
-    const prices = await fetchPrices([sym]);
+    const { prices, prevClose: pc2 } = await fetchPrices([sym]);
     if (prices[sym] != null) {
       marketPrices[sym] = prices[sym];
+      if (pc2[sym] != null) { prevClosePrices[sym] = pc2[sym]; savePrevClose(); }
       savePrices();
       renderLots();
     }
@@ -750,7 +774,9 @@ async function refreshPrices() {
 
   let priceBySymbol;
   try {
-    priceBySymbol = await fetchPrices(symbols);
+    const result = await fetchPrices(symbols);
+    priceBySymbol = result.prices;
+    window._prevCloseResult = result.prevClose;
   } catch (err) {
     showBanner(
       `<strong>Couldn't refresh live prices.</strong> ` +
@@ -774,6 +800,7 @@ async function refreshPrices() {
   }
 
   updatedSyms.forEach(s => { marketPrices[s] = priceBySymbol[s]; });
+  if (window._prevCloseResult) { Object.keys(window._prevCloseResult).forEach(s => { prevClosePrices[s] = window._prevCloseResult[s]; }); savePrevClose(); }
   savePrices();
   holdings.forEach(h => { if (priceBySymbol[h.symbol] != null) h.price = priceBySymbol[h.symbol]; });
   saveHoldings(holdings);
